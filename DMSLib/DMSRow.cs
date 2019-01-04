@@ -9,6 +9,7 @@ namespace DMSLib
 {
     public class DMSRow
     {
+        public DMSCompareResult CompareResult = DMSCompareResult.NONE;
         public byte[] Values;
         public int[] Indexes;
         public void InsertValueString(int index, string val)

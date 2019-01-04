@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DMSColumn.cs" />
+    <Compile Include="DMSCompareResult.cs" />
     <Compile Include="DMSDecoder.cs" />
     <Compile Include="DMSEncoder.cs" />
     <Compile Include="DMSFile.cs" />

@@ -15,6 +15,7 @@ namespace DMSLib
         public DMSRecordMetadata Metadata;
         public List<DMSColumn> Columns = new List<DMSColumn>();
         public List<DMSRow> Rows = new List<DMSRow>();
+        public DMSCompareResult CompareResult = DMSCompareResult.NONE;
         public override string ToString()
         {
             return Name;
