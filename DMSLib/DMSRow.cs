@@ -129,10 +129,22 @@ namespace DMSLib
                 case FieldTypes.SIGNED_NUMBER:
                     return Int64.Parse(GetStringValue(index));
                 case FieldTypes.DATE:
+                    if (GetStringValue(index) == "\0")
+                    {
+                        return null;
+                    }
                     return DateTime.ParseExact(GetStringValue(index), "yyyy-MM-dd", CultureInfo.InvariantCulture);
                 case FieldTypes.DATETIME:
+                    if (GetStringValue(index) == "\0")
+                    {
+                        return null;
+                    }
                     return DateTime.ParseExact(GetStringValue(index), "yyyy-MM-dd-HH.mm.ss.000000", CultureInfo.InvariantCulture);
                 case FieldTypes.TIME:
+                    if (GetStringValue(index) == "\0")
+                    {
+                        return null;
+                    }
                     return DateTime.ParseExact(GetStringValue(index), "HH.mm.ss.000000", CultureInfo.InvariantCulture);
                 case FieldTypes.IMG_OR_ATTACH:
                     var start = Indexes[index];
