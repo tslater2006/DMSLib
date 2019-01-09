@@ -8,6 +8,6 @@ namespace DMSLib
 {
     public enum DMSCompareResult
     {
-        NEW, UPDATE, NONE
+        NEW, UPDATE, SAME, NONE
     }
 }
