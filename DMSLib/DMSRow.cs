@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -12,6 +14,7 @@ namespace DMSLib
         public DMSCompareResult CompareResult = DMSCompareResult.NONE;
         public byte[] Values;
         public int[] Indexes;
+        public FieldTypes[] Types;
         public void InsertValueString(int index, string val)
         {
             var currentValues = new List<string>(GetValuesAsString());
@@ -113,7 +116,35 @@ namespace DMSLib
                 return "B{" + BitConverter.ToString(data).Replace("-", "") + "}";
             }
         }
-
+        public dynamic GetValue(int index)
+        {
+            switch (Types[index])
+            {
+                case FieldTypes.CHAR:
+                    return GetStringValue(index);
+                case FieldTypes.LONG_CHAR:
+                    return GetStringValue(index);
+                case FieldTypes.NUMBER:
+                    return Int64.Parse(GetStringValue(index));
+                case FieldTypes.SIGNED_NUMBER:
+                    return Int64.Parse(GetStringValue(index));
+                case FieldTypes.DATE:
+                    return DateTime.ParseExact(GetStringValue(index), "yyyy-MM-dd", CultureInfo.InvariantCulture);
+                case FieldTypes.DATETIME:
+                    return DateTime.ParseExact(GetStringValue(index), "yyyy-MM-dd-HH.mm.ss.000000", CultureInfo.InvariantCulture);
+                case FieldTypes.TIME:
+                    return DateTime.ParseExact(GetStringValue(index), "HH.mm.ss.000000", CultureInfo.InvariantCulture);
+                case FieldTypes.IMG_OR_ATTACH:
+                    var start = Indexes[index];
+                    var end = Indexes[index + 1];
+                    var data = new byte[end - start];
+                    Array.Copy(Values, start, data, 0, end - start);
+                    return data;
+                default:
+                    Debugger.Break();
+                    return null;
+            }
+        }
         public string[] GetValuesAsString()
         {
             string[] values = new string[Indexes.Length - 1];
@@ -147,6 +178,15 @@ namespace DMSLib
             }
 
             sw.WriteLine("//");
+        }
+
+        internal void SetFieldTypes(DMSTable table)
+        {
+            Types = new FieldTypes[table.Metadata.FieldMetadata.Count];
+            for(var x = 0; x < table.Metadata.FieldMetadata.Count; x++)
+            {
+                Types[x] = table.Metadata.FieldMetadata[x].FieldType;
+            }
         }
     }
 }
