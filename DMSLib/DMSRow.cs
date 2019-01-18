@@ -54,6 +54,7 @@ namespace DMSLib
                 ms.Write(valBytes, 0, valBytes.Length);
             }
             Values = ms.ToArray();
+            newIndexes.Add(Values.Length);
             ms.Dispose();
             Indexes = newIndexes.ToArray();
             newIndexes.Clear();
@@ -104,6 +105,7 @@ namespace DMSLib
         {
             var start = Indexes[index];
             var end = Indexes[index + 1];
+            
             var data = new byte[end - start];
             Array.Copy(Values, start, data, 0, end - start);
             var utf8Enc = Encoding.UTF8.GetString(data);
