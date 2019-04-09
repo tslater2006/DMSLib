@@ -3,27 +3,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace DMSLib
 {
     public class DMSFile
     {
-        public string FileName;
-        public string BlankLine;
-        public string Version;
-        public string Endian;
         public string BaseLanguage;
+        public string BlankLine;
         public string Database;
-        public string Started;
-        public List<string> Namespaces = new List<string>();
 
         public DDLDefaults DDLs;
+        public string Ended;
+        public string Endian;
+        public string FileName;
+        public List<string> Namespaces = new List<string>();
+        public string Started;
 
         public List<DMSTable> Tables = new List<DMSTable>();
-        public string Ended;
+        public string Version;
 
-        public void WriteToStream(StreamWriter sw)
+        public void WriteToStream(StreamWriter sw, bool saveOnlyDiffs = false)
         {
             /* Write out the header */
             sw.WriteLine($"SET VERSION_DAM  {Version}");
@@ -39,62 +38,39 @@ namespace DMSLib
             {
                 sw.WriteLine(space);
             }
+
             sw.WriteLine("/");
 
             var metadataLines = DMSEncoder.EncodeDataToLines(DDLs.GetBytes());
-            foreach(var line in metadataLines)
+            foreach (var line in metadataLines)
             {
                 sw.WriteLine(line);
             }
+
             sw.WriteLine("/");
             foreach (var table in Tables)
             {
-                table.WriteToStream(sw);
+                if (saveOnlyDiffs)
+                {
+                    if (table.CompareResult == DMSCompareResult.NONE || table.CompareResult == DMSCompareResult.SAME)
+                    {
+                        /* skip */
+                        continue;
+                    }
+                }
+
+                table.WriteToStream(sw, saveOnlyDiffs);
             }
+
             sw.WriteLine($"REM Ended: {Ended}");
-
         }
-
     }
 
     public class DDLDefaults
     {
         public DDLModel[] Models;
-        public int Unknown1;
         public TableSpaceParamOverride[] Overrides;
-
-        public byte[] GetBytes()
-        {
-            byte[] bytes = new byte[0];
-            using (MemoryStream ms = new MemoryStream())
-            {
-                using (BinaryWriter bw = new BinaryWriter(ms))
-                {
-                    bw.Write(Models.Length);
-                    foreach(var model in Models)
-                    {
-                        model.WriteBytes(bw);
-                    }
-                    bw.Write(Unknown1);
-                    bw.Write(Models.Sum(m => m.Parameters.Count()));
-                    foreach (var model in Models)
-                    {
-                        foreach (var param in model.Parameters)
-                        {
-                            param.WriteBytes(bw);
-                        }
-                    }
-                    bw.Write(Overrides.Length);
-                    foreach (var over in Overrides)
-                    {
-                        over.WriteBytes(bw);
-                    }
-                }
-                bytes = ms.ToArray();
-            }
-
-            return bytes;
-        }
+        public int Unknown1;
 
         public DDLDefaults(byte[] data)
         {
@@ -109,11 +85,12 @@ namespace DMSLib
                     {
                         Models[x] = new DDLModel(br);
                     }
+
                     Unknown1 = BitConverter.ToInt32(br.ReadBytes(4), 0);
                     var parameterCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
-                    foreach(var model in Models)
+                    foreach (var model in Models)
                     {
-                        for(var x = 0; x < model.Parameters.Length; x++)
+                        for (var x = 0; x < model.Parameters.Length; x++)
                         {
                             model.Parameters[x] = new DDLParam(br);
                         }
@@ -121,27 +98,62 @@ namespace DMSLib
 
                     var overrideCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
                     Overrides = new TableSpaceParamOverride[overrideCount];
-                    for(var x = 0; x < overrideCount; x++)
+                    for (var x = 0; x < overrideCount; x++)
                     {
                         Overrides[x] = new TableSpaceParamOverride(br);
                     }
-
                 }
             }
+        }
+
+        public byte[] GetBytes()
+        {
+            byte[] bytes = new byte[0];
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (BinaryWriter bw = new BinaryWriter(ms))
+                {
+                    bw.Write(Models.Length);
+                    foreach (var model in Models)
+                    {
+                        model.WriteBytes(bw);
+                    }
+
+                    bw.Write(Unknown1);
+                    bw.Write(Models.Sum(m => m.Parameters.Count()));
+                    foreach (var model in Models)
+                    {
+                        foreach (var param in model.Parameters)
+                        {
+                            param.WriteBytes(bw);
+                        }
+                    }
+
+                    bw.Write(Overrides.Length);
+                    foreach (var over in Overrides)
+                    {
+                        over.WriteBytes(bw);
+                    }
+                }
+
+                bytes = ms.ToArray();
+            }
+
+            return bytes;
         }
     }
 
     public class DDLModel
     {
-        public int Unknown1;
-        public int Unknown2;
-        public int ParameterCount;
-        public short StatementType;
-        public short PlatformID;
-
         public string ModelSQL;
+        public int ParameterCount;
 
         public DDLParam[] Parameters;
+        public short PlatformID;
+        public short StatementType;
+        public int Unknown1;
+        public int Unknown2;
+
         public DDLModel(BinaryReader br)
         {
             Unknown1 = br.ReadInt32();
@@ -164,7 +176,7 @@ namespace DMSLib
             bw.Write(PlatformID);
             bw.Write(ModelSQL.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(ModelSQL));
-            bw.Write((short)0);
+            bw.Write((short) 0);
         }
 
         private string FromUnicodeBytes(byte[] data)
@@ -175,17 +187,20 @@ namespace DMSLib
             {
                 str = str.Substring(0, nullIndex);
             }
+
             return str;
         }
     }
+
     public class DDLParam
     {
-        public int Unknown1;
-        public short StatementType;
-        public short PlatformID;
         public string Name;
-        public string Value;
+        public short PlatformID;
+        public short StatementType;
+        public int Unknown1;
         public int Unknown2;
+        public string Value;
+
         public DDLParam(BinaryReader br)
         {
             Unknown1 = br.ReadInt32();
@@ -206,10 +221,10 @@ namespace DMSLib
             bw.Write(PlatformID);
             bw.Write(Name.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(Name));
-            bw.Write((short)0);
+            bw.Write((short) 0);
             bw.Write(Value.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(Value));
-            bw.Write((short)0);
+            bw.Write((short) 0);
             bw.Write(Unknown2);
         }
 
@@ -221,19 +236,21 @@ namespace DMSLib
             {
                 str = str.Substring(0, nullIndex);
             }
+
             return str;
         }
     }
 
     public class TableSpaceParamOverride
     {
-        public int SizingSet;
-        public short PlatformID;
-        public string Name;
-        public string Value;
         public string DBName;
+        public string Name;
+        public short PlatformID;
+        public int SizingSet;
         public string TableSpace;
         public int Unknown1;
+        public string Value;
+
         public TableSpaceParamOverride(BinaryReader br)
         {
             SizingSet = BitConverter.ToInt32(br.ReadBytes(4), 0);
@@ -252,19 +269,19 @@ namespace DMSLib
 
             bw.Write(Name.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(Name));
-            bw.Write((short)0);
+            bw.Write((short) 0);
 
             bw.Write(Value.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(Value));
-            bw.Write((short)0);
+            bw.Write((short) 0);
 
             bw.Write(DBName.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(DBName));
-            bw.Write((short)0);
+            bw.Write((short) 0);
 
             bw.Write(TableSpace.Length * 2 + 2);
             bw.Write(Encoding.Unicode.GetBytes(TableSpace));
-            bw.Write((short)0);
+            bw.Write((short) 0);
 
             bw.Write(Unknown1);
         }
@@ -277,6 +294,7 @@ namespace DMSLib
             {
                 str = str.Substring(0, nullIndex);
             }
+
             return str;
         }
     }

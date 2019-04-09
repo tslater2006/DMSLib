@@ -1,21 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DMSLib
 {
     public class DMSTable
     {
-        public string Name;
-        public string DBName;
-        public string WhereClause;
-        public DMSRecordMetadata Metadata;
         public List<DMSColumn> Columns = new List<DMSColumn>();
-        public List<DMSRow> Rows = new List<DMSRow>();
         public DMSCompareResult CompareResult = DMSCompareResult.NONE;
+        public string DBName;
+        public DMSRecordMetadata Metadata;
+        public string Name;
+        public List<DMSRow> Rows = new List<DMSRow>();
+        public string WhereClause;
+
         public override string ToString()
         {
             return Name;
@@ -23,7 +21,6 @@ namespace DMSLib
 
         public void AddColumn(DMSNewColumn newColumn, DMSColumn colBefore, string defaultValue)
         {
-            
             /* Update DMSRecord metadata */
             Metadata.FieldCount++;
 
@@ -37,22 +34,22 @@ namespace DMSLib
             newDMSCol.Name = newColumn.FieldName;
             if (newColumn.DecimalPositions > 0)
             {
-                newDMSCol.Size = newColumn.FieldLength +"," + newColumn.DecimalPositions;
+                newDMSCol.Size = newColumn.FieldLength + "," + newColumn.DecimalPositions;
             }
+
             newDMSCol.Size = newColumn.FieldLength.ToString();
 
             newDMSCol.Type = "CHAR";
 
             Columns.Insert(colIndex, newDMSCol);
 
-            foreach(var row in Rows)
+            foreach (var row in Rows)
             {
                 row.InsertValueString(colIndex, defaultValue);
             }
-
         }
 
-        public void WriteToStream(StreamWriter sw)
+        public void WriteToStream(StreamWriter sw, bool saveOnlyDiffs = false)
         {
             if (WhereClause.Length > 0)
             {
@@ -63,6 +60,7 @@ namespace DMSLib
             {
                 sw.WriteLine($"EXPORT  {Name}.{DBName} ");
             }
+
             sw.WriteLine("/");
 
             /* Write table metadata */
@@ -74,10 +72,20 @@ namespace DMSLib
             /* Write each row of data */
             foreach (DMSRow row in Rows)
             {
+                if (saveOnlyDiffs)
+                {
+                    if (row.CompareResult == DMSCompareResult.NONE || row.CompareResult == DMSCompareResult.SAME)
+                    {
+                        /* skip this row */
+                        continue;
+                    }
+                }
+
                 row.WriteToStream(sw);
                 /* WriteTableRow(stream, row);
                 stream.WriteLine("//");*/
             }
+
             sw.WriteLine("/");
         }
 
@@ -106,6 +114,7 @@ namespace DMSLib
                     curLineLength = nextColumn.Length;
                 }
             }
+
             stream.WriteLine();
             stream.WriteLine("/");
         }
@@ -119,7 +128,8 @@ namespace DMSLib
             var colIndex = Columns.IndexOf(selectedColumn);
 
             /* Remove column from metadata */
-            Metadata.FieldMetadata.Remove(Metadata.FieldMetadata.Where(p => p.FieldName == selectedColumn.Name).First());
+            Metadata.FieldMetadata.Remove(Metadata.FieldMetadata.Where(p => p.FieldName == selectedColumn.Name)
+                .First());
 
             /* Remove the DMSColumn */
             Columns.Remove(selectedColumn);
@@ -134,17 +144,18 @@ namespace DMSLib
 
     public class DMSNewColumn
     {
-        public string FieldName;
-        public int VersionNumber;
         public int DecimalPositions;
-
-        public UseEditFlags UseEditMask;
-        public FieldTypes FieldType;
+        public GUIControls DefaultGUIControl;
         public FieldFormats FieldFormat;
         public int FieldLength;
-        public GUIControls DefaultGUIControl;
+        public string FieldName;
+        public FieldTypes FieldType;
 
-        public DMSNewColumn(string fieldName, int version, int length, int decPositions, UseEditFlags useEdit, FieldTypes type, FieldFormats format, GUIControls gui = GUIControls.DEFAULT)
+        public UseEditFlags UseEditMask;
+        public int VersionNumber;
+
+        public DMSNewColumn(string fieldName, int version, int length, int decPositions, UseEditFlags useEdit,
+            FieldTypes type, FieldFormats format, GUIControls gui = GUIControls.DEFAULT)
         {
             FieldName = fieldName;
             VersionNumber = version;
@@ -155,7 +166,5 @@ namespace DMSLib
             FieldFormat = format;
             DefaultGUIControl = gui;
         }
-
-
     }
 }
