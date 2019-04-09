@@ -4,41 +4,167 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace DMSLib
 {
     public class DMSRecordMetadata
     {
-        public string RecordLanguage;
-        public string OwnerID;
         public string AnalyticDeleteRecord;
-        public string ParentRecord;
-        public string RecordName;
-        public string RelatedLanguageRecord;
-        public string RecordDBName;
-        public string TimestampField; /* 38 bytes */
-        public string SystemIDField; /* 38 bytes */
+        public int BuildSequence;
+
+        /* 4 bytes unknown */
+        public int DDLParamGroupCount;
+        public int FieldCount;
+
+        /* List of Field Info structures */
+        public List<DMSRecordFieldMetadata> FieldMetadata = new List<DMSRecordFieldMetadata>();
+        public int IndexCount;
+
+        public List<DMSRecordIndexMetadata> Indexes = new List<DMSRecordIndexMetadata>();
+
+        /* This contains the "indexes" for the record (if any), as well as tablespace info for the record */
+        public byte[] LeftoverData;
 
         public string OptimizationTriggers;
+        public string OwnerID;
+
+        public List<DMSDDLParamGroup> ParameterGroups = new List<DMSDDLParamGroup>();
+        public string ParentRecord;
+        public string RecordDBName;
+        public string RecordLanguage;
+        public string RecordName;
+        public string RelatedLanguageRecord;
+        public string SystemIDField; /* 38 bytes */
+
+        public List<DMSRecordTablespaceMetadata> Tablespaces = new List<DMSRecordTablespaceMetadata>();
+        public string TimestampField; /* 38 bytes */
 
         /* 10 bytes unknown 00 00 01 00 00 00 00 00 00 00 */
         public byte[] Unknown2;
 
-        public int VersionNumber;
-        public int FieldCount;
-        public int BuildSequence;
-        public int IndexCount;
+        /* 22 bytes unknown*/
+        public byte[] Unknown4;
 
-        public List<DMSRecordTablespaceMetadata> Tablespaces = new List<DMSRecordTablespaceMetadata>();
+        public int VersionNumber;
+
+        public int VersionNumber2;
+
+        public DMSRecordMetadata(byte[] data)
+        {
+            using (MemoryStream ms = new MemoryStream(data))
+            {
+                using (BinaryReader br = new BinaryReader(ms))
+                {
+                    RecordLanguage = FromUnicodeBytes(br.ReadBytes(8));
+                    OwnerID = FromUnicodeBytes(br.ReadBytes(10));
+                    AnalyticDeleteRecord = FromUnicodeBytes(br.ReadBytes(32));
+                    ParentRecord = FromUnicodeBytes(br.ReadBytes(32));
+                    RecordName = FromUnicodeBytes(br.ReadBytes(32));
+                    RelatedLanguageRecord = FromUnicodeBytes(br.ReadBytes(32));
+                    RecordDBName = FromUnicodeBytes(br.ReadBytes(38));
+
+                    var timeStampFieldBytes = br.ReadBytes(38);
+                    var systemIDFieldBytes = br.ReadBytes(38);
+                    TimestampField = FromUnicodeBytes(timeStampFieldBytes);
+                    SystemIDField = FromUnicodeBytes(systemIDFieldBytes);
+
+                    OptimizationTriggers = FromUnicodeBytes(br.ReadBytes(4));
+
+                    /* Unknown 10 bytes */
+                    Unknown2 = br.ReadBytes(10);
+                    if (Unknown2.Sum(b => b) != 1 && Unknown2[2] != 1)
+                    {
+                        //Debugger.Break();
+                    }
+
+                    VersionNumber = BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    FieldCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    BuildSequence = BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    IndexCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
+
+                    /* Unknown 4 bytes */
+                    DDLParamGroupCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
+
+                    VersionNumber2 = BitConverter.ToInt32(br.ReadBytes(4), 0);
+
+                    /* Unknown 22 bytes */
+                    Unknown4 = br.ReadBytes(22);
+
+                    byte[] fieldMetadata;
+
+                    for (var x = 0; x < FieldCount; x++)
+                    {
+                        fieldMetadata = br.ReadBytes(106);
+                        FieldMetadata.Add(new DMSRecordFieldMetadata(fieldMetadata));
+                    }
+
+                    /* Read in the Index headers (if any) */
+                    for (var x = 0; x < IndexCount; x++)
+                    {
+                        var indexHeaderData = br.ReadBytes(40);
+                        var index = new DMSRecordIndexMetadata(indexHeaderData);
+                        Indexes.Add(index);
+                    }
+
+                    foreach (var index in Indexes)
+                    {
+                        for (var x = 0; x < index.FieldCount; x++)
+                        {
+                            var fieldInfo = new DMSRecordIndexField(br.ReadBytes(48));
+                            index.Fields.Add(fieldInfo);
+                        }
+
+                        for (var x = 0; x < index.IndexParamGroupCount; x++)
+                        {
+                            DMSDDLParamGroup parmList = new DMSDDLParamGroup();
+                            parmList.Header = new DMSDDLParamHeader(br.ReadBytes(16));
+                            index.ParameterGroups.Add(parmList);
+                        }
+
+                        foreach (var parmGroup in index.ParameterGroups)
+                        {
+                            for (var y = 0; y < parmGroup.Header.Count; y++)
+                            {
+                                parmGroup.Parameters.Add(new DMSDDLParam(br.ReadBytes(276)));
+                            }
+                        }
+                    }
+
+                    for (var x = 0; x < DDLParamGroupCount; x++)
+                    {
+                        DMSDDLParamGroup parmList = new DMSDDLParamGroup();
+                        parmList.Header = new DMSDDLParamHeader(br.ReadBytes(16));
+                        ParameterGroups.Add(parmList);
+                    }
+
+                    foreach (var parmGroup in ParameterGroups)
+                    {
+                        for (var y = 0; y < parmGroup.Header.Count; y++)
+                        {
+                            parmGroup.Parameters.Add(new DMSDDLParam(br.ReadBytes(276)));
+                        }
+                    }
+
+                    while (br.BaseStream.Position < br.BaseStream.Length - 1)
+                    {
+                        var DatabaseType = FromUnicodeBytes(br.ReadBytes(2));
+                        var TableSpaceName = FromUnicodeBytes(br.ReadBytes(62));
+                        var DBName = FromUnicodeBytes(br.ReadBytes(18));
+                        Tablespaces.Add(new DMSRecordTablespaceMetadata()
+                            {DatabaseType = DatabaseType, TablespaceName = TableSpaceName, DatabaseName = DBName});
+                    }
+                }
+            }
+        }
+
         internal void WriteToStream(StreamWriter sw)
         {
-
             var lines = DMSEncoder.EncodeDataToLines(GetBytes());
             foreach (var line in lines)
             {
                 sw.WriteLine(line);
             }
+
             MemoryStream ms = new MemoryStream();
             foreach (DMSRecordFieldMetadata fieldmeta in FieldMetadata)
             {
@@ -151,30 +277,13 @@ namespace DMSLib
                 ms.Write(tableSpaceName, 0, tableSpaceName.Length);
                 ms.Write(dbName, 0, dbName.Length);
             }
+
             lines = DMSEncoder.EncodeDataToLines(ms.ToArray());
             foreach (var line in lines)
             {
                 sw.WriteLine(line);
             }
         }
-
-        /* 4 bytes unknown */
-        public int DDLParamGroupCount;
-
-        public int VersionNumber2;
-
-        /* 22 bytes unknown*/
-        public byte[] Unknown4;
-
-        /* List of Field Info structures */
-        public List<DMSRecordFieldMetadata> FieldMetadata = new List<DMSRecordFieldMetadata>();
-
-        public List<DMSRecordIndexMetadata> Indexes = new List<DMSRecordIndexMetadata>();
-
-        public List<DMSDDLParamGroup> ParameterGroups = new List<DMSDDLParamGroup>();
-
-        /* This contains the "indexes" for the record (if any), as well as tablespace info for the record */
-        public byte[] LeftoverData;
 
         private byte[] GetBytes()
         {
@@ -241,136 +350,30 @@ namespace DMSLib
             {
                 str = str.Substring(0, nullIndex);
             }
+
             return str;
-        }
-
-        public DMSRecordMetadata(byte[] data)
-        {
-            using (MemoryStream ms = new MemoryStream(data))
-            {
-                using (BinaryReader br = new BinaryReader(ms))
-                {
-
-                    RecordLanguage = FromUnicodeBytes(br.ReadBytes(8));
-                    OwnerID = FromUnicodeBytes(br.ReadBytes(10));
-                    AnalyticDeleteRecord = FromUnicodeBytes(br.ReadBytes(32));
-                    ParentRecord = FromUnicodeBytes(br.ReadBytes(32));
-                    RecordName = FromUnicodeBytes(br.ReadBytes(32));
-                    RelatedLanguageRecord = FromUnicodeBytes(br.ReadBytes(32));
-                    RecordDBName = FromUnicodeBytes(br.ReadBytes(38));
-
-                    var timeStampFieldBytes = br.ReadBytes(38);
-                    var systemIDFieldBytes = br.ReadBytes(38);
-                    TimestampField = FromUnicodeBytes(timeStampFieldBytes);
-                    SystemIDField = FromUnicodeBytes(systemIDFieldBytes);
-
-                    OptimizationTriggers = FromUnicodeBytes(br.ReadBytes(4));
-
-                    /* Unknown 10 bytes */
-                    Unknown2 = br.ReadBytes(10);
-                    if (Unknown2.Sum(b => b) != 1 && Unknown2[2] != 1)
-                    {
-                        Debugger.Break();
-                    }
-                    VersionNumber = BitConverter.ToInt32(br.ReadBytes(4), 0);
-                    FieldCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
-                    BuildSequence = BitConverter.ToInt32(br.ReadBytes(4), 0);
-                    IndexCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
-
-                    /* Unknown 4 bytes */
-                    DDLParamGroupCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
-
-                    VersionNumber2 = BitConverter.ToInt32(br.ReadBytes(4), 0);
-
-                    /* Unknown 22 bytes */
-                    Unknown4 = br.ReadBytes(22);
-
-                    byte[] fieldMetadata;
-
-                    for (var x = 0; x < FieldCount; x++)
-                    {
-                        fieldMetadata = br.ReadBytes(106);
-                        FieldMetadata.Add(new DMSRecordFieldMetadata(fieldMetadata));
-                    }
-
-                    /* Read in the Index headers (if any) */
-                    for (var x = 0; x < IndexCount; x++)
-                    {
-                        var indexHeaderData = br.ReadBytes(40);
-                        var index = new DMSRecordIndexMetadata(indexHeaderData);
-                        Indexes.Add(index);
-                    }
-
-                    foreach (var index in Indexes)
-                    {
-                        for (var x = 0; x < index.FieldCount; x++)
-                        {
-                            var fieldInfo = new DMSRecordIndexField(br.ReadBytes(48));
-                            index.Fields.Add(fieldInfo);
-                        }
-
-                        for (var x = 0; x < index.IndexParamGroupCount; x++)
-                        {
-                            DMSDDLParamGroup parmList = new DMSDDLParamGroup();
-                            parmList.Header = new DMSDDLParamHeader(br.ReadBytes(16));
-                            index.ParameterGroups.Add(parmList);
-                        }
-
-                        foreach (var parmGroup in index.ParameterGroups)
-                        {
-                            for (var y = 0; y < parmGroup.Header.Count; y++)
-                            {
-                                parmGroup.Parameters.Add(new DMSDDLParam(br.ReadBytes(276)));
-                            }
-                        }
-
-                    }
-
-                    for (var x = 0; x < DDLParamGroupCount; x++)
-                    {
-                        DMSDDLParamGroup parmList = new DMSDDLParamGroup();
-                        parmList.Header = new DMSDDLParamHeader(br.ReadBytes(16));
-                        ParameterGroups.Add(parmList);
-                    }
-
-                    foreach (var parmGroup in ParameterGroups)
-                    {
-                        for (var y = 0; y < parmGroup.Header.Count; y++)
-                        {
-                            parmGroup.Parameters.Add(new DMSDDLParam(br.ReadBytes(276)));
-                        }
-                    }
-                    while (br.BaseStream.Position < br.BaseStream.Length - 1)
-                    {
-                        var DatabaseType = FromUnicodeBytes(br.ReadBytes(2));
-                        var TableSpaceName = FromUnicodeBytes(br.ReadBytes(62));
-                        var DBName = FromUnicodeBytes(br.ReadBytes(18));
-                        Tablespaces.Add(new DMSRecordTablespaceMetadata() { DatabaseType = DatabaseType, TablespaceName = TableSpaceName, DatabaseName = DBName });
-                    }
-                }
-            }
         }
     }
 
     public class DMSRecordFieldMetadata
     {
+        public int DecimalPositions;
+        public GUIControls DefaultGUIControl;
+        public FieldFormats FieldFormat;
+        public int FieldLength;
         public string FieldName;
+
+        public FieldTypes FieldType;
         public string RecordName;
         public int Unknown1;
-        public int VersionNumber;
-        public int DecimalPositions;
 
         /* Something to do with Family Name and Display Name used with "Custom" format type*/
         public short Unknown2;
-        public UseEditFlags UseEditMask;
-
-        public FieldTypes FieldType;
-        public FieldFormats FieldFormat;
-        public int FieldLength;
-        public GUIControls DefaultGUIControl;
 
         public int Unknown5;
         public short Unknown6;
+        public UseEditFlags UseEditMask;
+        public int VersionNumber;
 
         public DMSRecordFieldMetadata(byte[] data)
         {
@@ -385,20 +388,22 @@ namespace DMSLib
                     {
                         Debugger.Break();
                     }
+
                     VersionNumber = BitConverter.ToInt32(br.ReadBytes(4), 0);
                     DecimalPositions = BitConverter.ToInt32(br.ReadBytes(4), 0);
 
-                    UseEditMask = (UseEditFlags)BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    UseEditMask = (UseEditFlags) BitConverter.ToInt32(br.ReadBytes(4), 0);
 
                     Unknown2 = BitConverter.ToInt16(br.ReadBytes(2), 0);
                     if (Unknown2 != 0)
                     {
                         Debugger.Break();
                     }
-                    FieldType = (FieldTypes)BitConverter.ToInt16(br.ReadBytes(2), 0);
-                    FieldFormat = (FieldFormats)BitConverter.ToInt16(br.ReadBytes(2), 0);
+
+                    FieldType = (FieldTypes) BitConverter.ToInt16(br.ReadBytes(2), 0);
+                    FieldFormat = (FieldFormats) BitConverter.ToInt16(br.ReadBytes(2), 0);
                     FieldLength = BitConverter.ToInt32(br.ReadBytes(4), 0);
-                    DefaultGUIControl = (GUIControls)BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    DefaultGUIControl = (GUIControls) BitConverter.ToInt32(br.ReadBytes(4), 0);
 
                     Unknown5 = BitConverter.ToInt32(br.ReadBytes(4), 0);
                     Unknown6 = BitConverter.ToInt16(br.ReadBytes(2), 0);
@@ -406,7 +411,6 @@ namespace DMSLib
                     {
                         Debugger.Break();
                     }
-
                 }
             }
         }
@@ -448,12 +452,12 @@ namespace DMSLib
             ms.Write(BitConverter.GetBytes(Unknown1), 0, 4);
             ms.Write(BitConverter.GetBytes(VersionNumber), 0, 4);
             ms.Write(BitConverter.GetBytes(DecimalPositions), 0, 4);
-            ms.Write(BitConverter.GetBytes((int)UseEditMask), 0, 4);
+            ms.Write(BitConverter.GetBytes((int) UseEditMask), 0, 4);
             ms.Write(BitConverter.GetBytes(Unknown2), 0, 2);
-            ms.Write(BitConverter.GetBytes((short)FieldType), 0, 2);
-            ms.Write(BitConverter.GetBytes((short)FieldFormat), 0, 2);
+            ms.Write(BitConverter.GetBytes((short) FieldType), 0, 2);
+            ms.Write(BitConverter.GetBytes((short) FieldFormat), 0, 2);
             ms.Write(BitConverter.GetBytes(FieldLength), 0, 4);
-            ms.Write(BitConverter.GetBytes((int)DefaultGUIControl), 0, 4);
+            ms.Write(BitConverter.GetBytes((int) DefaultGUIControl), 0, 4);
             ms.Write(BitConverter.GetBytes(Unknown5), 0, 4);
             ms.Write(BitConverter.GetBytes(Unknown6), 0, 2);
 
@@ -468,12 +472,14 @@ namespace DMSLib
             return str;
         }
     }
+
     public class DMSRecordTablespaceMetadata
     {
+        public string DatabaseName;
         public string DatabaseType;
         public string TablespaceName;
-        public string DatabaseName;
     }
+
     public class DMSDDLParamGroup
     {
         public DMSDDLParamHeader Header;
@@ -510,11 +516,12 @@ namespace DMSLib
             return ms.ToArray();
         }
     }
+
     public class DMSDDLParamHeader
     {
+        public int Count;
         public int DBType;
         public int SizingSet;
-        public int Count;
         public int Unknown1;
 
 
@@ -536,6 +543,7 @@ namespace DMSLib
             }
         }
     }
+
     public class DMSDDLParam
     {
         public string Name;
@@ -552,6 +560,7 @@ namespace DMSLib
                 }
             }
         }
+
         private string FromUnicodeBytes(byte[] data)
         {
             var str = Encoding.Unicode.GetString(data);
@@ -563,35 +572,35 @@ namespace DMSLib
 
     public class DMSRecordIndexMetadata
     {
-        public string IndexID; /* 2 bytes */
-        public short FieldCount; /* 2 bytes */
-        public int Unknown1; /* 2 bytes */
-        public int IndexParamGroupCount; /* 2 bytes */
-        public short Unknown2; /* 2 bytes */
-        public RecordIndexTypes IndexType; /* 2 bytes */
-        public short Unique; /* 2 bytes */
-        public short Cluster; /* 2 bytes */
         public short Active; /* 2 bytes */
-        public short PlatformSBS; /* 2 bytes */
-        public short PlatformDB2; /* 2 bytes */
-        public short PlatformORA; /* 2 bytes */
-        public short PlatformINF; /* 2 bytes */
-        public short PlatformDBX; /* 2 bytes */
-        public short PlatformALB; /* 2 bytes */
-        public short PlatformSYB; /* 2 bytes */
-        public short PlatformMSS; /* 2 bytes */
-        public short PlatformDB4; /* 2 bytes */
-        public int Unknown3; /* 4 bytes */
+        public short Cluster; /* 2 bytes */
+        public short FieldCount; /* 2 bytes */
 
         public List<DMSRecordIndexField> Fields = new List<DMSRecordIndexField>();
+        public string IndexID; /* 2 bytes */
+        public int IndexParamGroupCount; /* 2 bytes */
+        public RecordIndexTypes IndexType; /* 2 bytes */
         public List<DMSDDLParamGroup> ParameterGroups = new List<DMSDDLParamGroup>();
+        public short PlatformALB; /* 2 bytes */
+        public short PlatformDB2; /* 2 bytes */
+        public short PlatformDB4; /* 2 bytes */
+        public short PlatformDBX; /* 2 bytes */
+        public short PlatformINF; /* 2 bytes */
+        public short PlatformMSS; /* 2 bytes */
+        public short PlatformORA; /* 2 bytes */
+        public short PlatformSBS; /* 2 bytes */
+        public short PlatformSYB; /* 2 bytes */
+        public short Unique; /* 2 bytes */
+        public int Unknown1; /* 2 bytes */
+        public short Unknown2; /* 2 bytes */
+        public int Unknown3; /* 4 bytes */
+
         public DMSRecordIndexMetadata(byte[] data)
         {
             using (MemoryStream ms = new MemoryStream(data))
             {
                 using (BinaryReader br = new BinaryReader(ms))
                 {
-
                     IndexID = Encoding.Unicode.GetString(br.ReadBytes(2));
                     FieldCount = BitConverter.ToInt16(br.ReadBytes(2), 0);
                     Unknown1 = BitConverter.ToInt16(br.ReadBytes(2), 0);
@@ -599,13 +608,15 @@ namespace DMSLib
                     {
                         Debugger.Break();
                     }
+
                     IndexParamGroupCount = BitConverter.ToInt16(br.ReadBytes(2), 0);
                     Unknown2 = BitConverter.ToInt16(br.ReadBytes(2), 0);
                     if (Unknown2 != 0)
                     {
                         Debugger.Break();
                     }
-                    IndexType = (RecordIndexTypes)BitConverter.ToInt16(br.ReadBytes(2), 0);
+
+                    IndexType = (RecordIndexTypes) BitConverter.ToInt16(br.ReadBytes(2), 0);
                     Unique = BitConverter.ToInt16(br.ReadBytes(2), 0);
                     Cluster = BitConverter.ToInt16(br.ReadBytes(2), 0);
                     Active = BitConverter.ToInt16(br.ReadBytes(2), 0);
@@ -635,7 +646,7 @@ namespace DMSLib
             ms.Write(BitConverter.GetBytes(Unknown1), 0, 2);
             ms.Write(BitConverter.GetBytes(IndexParamGroupCount), 0, 2);
             ms.Write(BitConverter.GetBytes(Unknown2), 0, 2);
-            ms.Write(BitConverter.GetBytes((short)IndexType), 0, 2);
+            ms.Write(BitConverter.GetBytes((short) IndexType), 0, 2);
             ms.Write(BitConverter.GetBytes(Unique), 0, 2);
             ms.Write(BitConverter.GetBytes(Cluster), 0, 2);
             ms.Write(BitConverter.GetBytes(Active), 0, 2);
@@ -658,7 +669,7 @@ namespace DMSLib
             MemoryStream ms = new MemoryStream();
 
 
-            foreach(DMSRecordIndexField field in Fields)
+            foreach (DMSRecordIndexField field in Fields)
             {
                 byte[] fieldBytes = field.GetBytes();
                 ms.Write(fieldBytes, 0, fieldBytes.Length);
@@ -670,9 +681,9 @@ namespace DMSLib
 
     public class DMSRecordIndexField
     {
+        public int Ascending;
         public string FieldName;
         public int KeyPosition;
-        public int Ascending;
         public short Unknown3;
 
         public DMSRecordIndexField(byte[] data)
@@ -681,7 +692,6 @@ namespace DMSLib
             {
                 using (BinaryReader br = new BinaryReader(ms))
                 {
-
                     FieldName = FromUnicodeBytes(br.ReadBytes(38));
                     KeyPosition = BitConverter.ToInt32(br.ReadBytes(4), 0);
                     Ascending = BitConverter.ToInt32(br.ReadBytes(4), 0);
@@ -734,7 +744,6 @@ namespace DMSLib
         TIME_SECONDS = 12,
         TIME_MILLI = 13,
         CUSTOM = 14
-
     }
 
     public enum FieldTypes : short
@@ -766,7 +775,7 @@ namespace DMSLib
         DUP_ORDER_KEY = 1 << 1,
         SYS_MAINT = 1 << 2,
         AUD_FLD_ADD = 1 << 3,
-        ALT_SRCH_KEY = 1 <<4,
+        ALT_SRCH_KEY = 1 << 4,
         LIST_BOX_ITEM = 1 << 5,
         DESCEND_KEY = 1 << 6,
         AUD_FLD_CHG = 1 << 7,
@@ -792,7 +801,7 @@ namespace DMSLib
         SRCH_EVENT_FOR_PROMPT = 1 << 27,
         SRCH_EDIT = 1 << 29,
         ENABLE_AUTO_CMPLT_SRCH_RECORD = 1 << 30,
-        PERSIST_IN_MENU = (uint)1 << 31,
+        PERSIST_IN_MENU = (uint) 1 << 31,
     }
 
     public enum RecordIndexTypes : short
@@ -801,5 +810,4 @@ namespace DMSLib
         ALT = 3,
         USER = 4
     }
-
 }
