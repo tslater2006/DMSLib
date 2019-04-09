@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -26,13 +25,13 @@ namespace DMSLib
                 using (StreamReader sr = new StreamReader(File.OpenRead(path)))
                 {
                     /* Read the version */
-                    file.Version = sr.ReadLine().Split(new char[] { ' ' },StringSplitOptions.RemoveEmptyEntries)[2];
+                    file.Version = sr.ReadLine().Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
 
                     /* Blank line */
                     file.BlankLine = sr.ReadLine();
 
-                    file.Endian = sr.ReadLine().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[2];
-                    file.BaseLanguage = sr.ReadLine().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[2];
+                    file.Endian = sr.ReadLine().Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
+                    file.BaseLanguage = sr.ReadLine().Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
                     file.Database = sr.ReadLine().Replace("REM Database: ", "");
                     file.Started = sr.ReadLine().Replace("REM Started: ", "");
 
@@ -50,6 +49,7 @@ namespace DMSLib
                             file.Namespaces.Add(currentLine);
                         }
                     }
+
                     StringBuilder sb = new StringBuilder();
                     /* Read big metadata blob */
                     MemoryStream ms = new MemoryStream();
@@ -61,10 +61,11 @@ namespace DMSLib
                         ms.Write(lineBytes, 0, lineBytes.Length);
                         currentLine = sr.ReadLine();
                     }
+
                     var ddlBlob = ms.ToArray();
                     file.DDLs = new DDLDefaults(ddlBlob);
                     ms.Close();
-                    
+
                     currentLine = sr.ReadLine();
 
                     while (currentLine.StartsWith("EXPORT"))
@@ -86,7 +87,8 @@ namespace DMSLib
                             {
                                 table.WhereClause += "\r\n";
                             }
-                            table.WhereClause += currentLine ;
+
+                            table.WhereClause += currentLine;
                             currentLine = sr.ReadLine();
                         }
 
@@ -125,6 +127,7 @@ namespace DMSLib
                             {
                                 col.Size += m.Groups[5].Value;
                             }
+
                             table.Columns.Add(col);
                         }
 
@@ -145,22 +148,30 @@ namespace DMSLib
                             {
                                 rowDecoder.DecodeLine(currentLine);
                             }
+
                             currentLine = sr.ReadLine();
                         }
+
                         currentLine = sr.ReadLine();
                     }
 
                     /* Parse "Ended" */
-                     file.Ended = currentLine.Replace("REM Ended: ", "");
-
+                    file.Ended = currentLine.Replace("REM Ended: ", "");
                 }
             }
+
             sw.Stop();
             Console.WriteLine("Total Read Time: " + sw.Elapsed.TotalSeconds + " seconds.");
             Console.WriteLine("DAT File Size: " + new FileInfo(path).Length / 1024.0 / 1024.0 + "MB");
-            Console.WriteLine("Memory Size Increase: " + ((Process.GetCurrentProcess().PrivateMemorySize64 - memSizeBefore) / 1024.0) / 1024.0 + "MB");
+            Console.WriteLine("Memory Size Increase: " +
+                              ((Process.GetCurrentProcess().PrivateMemorySize64 - memSizeBefore) / 1024.0) / 1024.0 +
+                              "MB");
             var totalRows = file.Tables.Sum(t => t.Rows.Count);
             Console.WriteLine("Total Row Count: " + totalRows);
+
+            /* Set the filename parameter */
+            file.FileName = new FileInfo(path).Name;
+
             return file;
         }
     }
