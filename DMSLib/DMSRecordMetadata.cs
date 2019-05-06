@@ -757,6 +757,7 @@ namespace DMSLib
         DATETIME = 6,
         IMG_OR_ATTACH = 8,
         IMAGE_REF = 9,
+        NOT_SET = 255
     }
 
     public enum GUIControls : int

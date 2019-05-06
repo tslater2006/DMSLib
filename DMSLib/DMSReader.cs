@@ -140,7 +140,7 @@ namespace DMSLib
                             {
                                 var nextRow = new DMSRow();
                                 rowDecoder.Finish(nextRow);
-                                nextRow.SetFieldTypes(table);
+                                nextRow.OwningTable = table;
                                 table.Rows.Add(nextRow);
                                 rowDecoder.Reset();
                             }

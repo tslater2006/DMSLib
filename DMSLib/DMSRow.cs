@@ -14,7 +14,30 @@ namespace DMSLib
         public DMSCompareResult CompareResult = DMSCompareResult.NONE;
         public byte[] Values;
         public int[] Indexes;
-        public FieldTypes[] Types;
+        public DMSTable OwningTable;
+
+        public FieldTypes GetFieldType(int index)
+        {
+            if (OwningTable != null)
+            {
+                return OwningTable.Metadata.FieldMetadata[index].FieldType;
+            } else
+            {
+                return FieldTypes.NOT_SET;
+            }
+        }
+
+        public string GetColumnName(int index)
+        {
+            if (OwningTable != null)
+            {
+                return OwningTable.Columns[index].Name;
+            } else
+            {
+                return "";
+            }
+        }
+
         public void InsertValueString(int index, string val)
         {
             var currentValues = new List<string>(GetValuesAsString());
@@ -120,7 +143,7 @@ namespace DMSLib
         }
         public dynamic GetValue(int index)
         {
-            switch (Types[index])
+            switch (GetFieldType(index))
             {
                 case FieldTypes.CHAR:
                     return GetStringValue(index);
@@ -194,13 +217,5 @@ namespace DMSLib
             sw.WriteLine("//");
         }
 
-        internal void SetFieldTypes(DMSTable table)
-        {
-            Types = new FieldTypes[table.Metadata.FieldMetadata.Count];
-            for(var x = 0; x < table.Metadata.FieldMetadata.Count; x++)
-            {
-                Types[x] = table.Metadata.FieldMetadata[x].FieldType;
-            }
-        }
     }
 }
