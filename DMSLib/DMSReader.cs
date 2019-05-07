@@ -141,6 +141,7 @@ namespace DMSLib
                                 var nextRow = new DMSRow();
                                 rowDecoder.Finish(nextRow);
                                 nextRow.OwningTable = table;
+                                nextRow.GenerateHashes();
                                 table.Rows.Add(nextRow);
                                 rowDecoder.Reset();
                             }

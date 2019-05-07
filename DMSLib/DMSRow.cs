@@ -15,6 +15,10 @@ namespace DMSLib
         public byte[] Values;
         public int[] Indexes;
         public DMSTable OwningTable;
+        public long KeyHash;
+        public long ValueHash;
+        public long DateHash;
+        public long VersionHash;
 
         public FieldTypes GetFieldType(int index)
         {
@@ -122,6 +126,59 @@ namespace DMSLib
             }
 
             return bytes;
+        }
+
+        internal void GenerateHashes()
+        {
+            /* generate hash of key fields */
+            var keyFieldIndexes = OwningTable.Metadata.FieldMetadata
+                            .Where(m => m.UseEditMask.HasFlag(UseEditFlags.KEY))
+                            .Select(t => OwningTable.Columns.IndexOf(OwningTable.Columns
+                                .First(c => c.Name == t.FieldName)));
+            
+            var dateFields = OwningTable.Metadata.FieldMetadata.Where(m => m.FieldType == FieldTypes.DATE 
+                                                                        || m.FieldType == FieldTypes.DATETIME 
+                                                                        || m.FieldType == FieldTypes.TIME)
+                            .Select(t => OwningTable.Columns.IndexOf(OwningTable.Columns
+                            .First(c => c.Name == t.FieldName)));
+
+            var versionFields = OwningTable.Metadata.FieldMetadata.Where(m => m.FieldName == "VERSION")
+                            .Select(t => OwningTable.Columns.IndexOf(OwningTable.Columns
+                            .First(c => c.Name == t.FieldName)));
+
+            var valueFields = Enumerable.Range(0, OwningTable.Metadata.FieldCount - 1).Where(i => dateFields.Contains(i) == false && versionFields.Contains(i) == false);
+
+            unchecked
+            {
+                int hash = 17;
+                foreach (var idx in keyFieldIndexes)
+                {
+                    hash = hash * 23 + GetStringValue(idx).GetHashCode();
+                }
+                KeyHash = hash;
+
+                hash = 17;
+                foreach (var idx in dateFields)
+                {
+                    hash = hash * 23 + GetStringValue(idx).GetHashCode();
+                }
+                DateHash = hash;
+
+                hash = 17;
+                foreach (var idx in versionFields)
+                {
+                    hash = hash * 23 + GetStringValue(idx).GetHashCode();
+                }
+                VersionHash = hash;
+
+                hash = 17;
+                foreach (var idx in valueFields)
+                {
+                    hash = hash * 23 + GetStringValue(idx).GetHashCode();
+                }
+                ValueHash = hash;
+
+            }
         }
 
         public string GetStringValue(int index)
