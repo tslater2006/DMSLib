@@ -25,7 +25,15 @@ namespace DMSLib
                 using (StreamReader sr = new StreamReader(File.OpenRead(path)))
                 {
                     /* Read the version */
-                    file.Version = sr.ReadLine().Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
+                    var firstLine = sr.ReadLine();
+
+                    /* ensure the first line is what we expect it to look like */
+                    if (firstLine.StartsWith("SET VERSION_DAM") == false)
+                    {
+                        throw new FormatException(path + " appears to be an invalid DMS DAT file.");
+                    }
+
+                    file.Version = firstLine.Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
 
                     /* Blank line */
                     file.BlankLine = sr.ReadLine();
