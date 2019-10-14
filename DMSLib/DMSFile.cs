@@ -6,6 +6,13 @@ using System.Text;
 
 namespace DMSLib
 {
+    public class DMSFileMergeResult
+    {
+        public bool Success;
+        public List<DMSTable> SuccessfulMerge = new List<DMSTable>();
+        public List<DMSTable> NoOpMerge = new List<DMSTable>();
+        public List<DMSTable> FailedMerge = new List<DMSTable>();
+    }
     public class DMSFile
     {
         public string BaseLanguage;
@@ -21,6 +28,110 @@ namespace DMSLib
 
         public List<DMSTable> Tables = new List<DMSTable>();
         public string Version;
+
+        public DMSFileMergeResult[] MergeDMSFiles(DMSFile[] filesToMerge, bool dedupRows = true)
+        {
+            List<DMSFileMergeResult> results = new List<DMSFileMergeResult>();
+            foreach (var f in filesToMerge)
+            {
+                results.Add(MergeDMSFile(f));
+            }
+
+            return results.ToArray();
+        }
+
+        public DMSFileMergeResult[] MergeDMSFiles(string[] filesToMerge, bool dedupRows = true)
+        {
+            List<DMSFileMergeResult> results = new List<DMSFileMergeResult>();
+            foreach (var f in filesToMerge)
+            {
+                results.Add(MergeDMSFile(DMSReader.Read(f)));
+            }
+
+            return results.ToArray();
+        }
+
+        public DMSFileMergeResult MergeDMSFile(DMSFile fileToMerge, bool dedupRows = true)
+        {
+            DMSFileMergeResult result = new DMSFileMergeResult();
+            if (this.Equals(fileToMerge))
+            {
+                result.Success = false;
+                return result;
+            }
+            foreach (var newTable in fileToMerge.Tables)
+            {
+                Console.WriteLine("Merging table: " + newTable.Name);
+                if (Tables.Select(t => t.Name).Contains(newTable.Name))
+                {
+                    /* make sure we can merge these rows */
+                    var existingColumns = Tables.Where(t => t.Name.Equals(newTable.Name)).First().Columns.Select(c => c.Name);
+                    if (newTable.Columns.Select(c=>c.Name).SequenceEqual(existingColumns)) {
+
+                        if (dedupRows) { DedupRows(newTable); }
+                        if (newTable.Rows.Count > 0)
+                        {
+                            Tables.Add(newTable);
+                            result.SuccessfulMerge.Add(newTable);
+                        } else
+                        {
+                            result.NoOpMerge.Add(newTable);
+                        }
+                    } else
+                    {
+                        result.FailedMerge.Add(newTable);
+                    }
+
+                } else
+                {
+                    /* no collision, just add it to the list */
+                    if (dedupRows) { DedupRows(newTable); }
+                    if (newTable.Rows.Count > 0)
+                    {
+                        Tables.Add(newTable);
+                        result.SuccessfulMerge.Add(newTable);
+                    } else
+                    {
+                        result.NoOpMerge.Add(newTable);
+                    }
+
+                }
+            }
+            result.Success = true;
+            return result;
+        }
+        private void DedupRows(DMSTable fromTable)
+        {
+            List<DMSRow> rowsToRemove = new List<DMSRow>();
+            bool rowRemoved = false;
+            foreach (DMSRow r in fromTable.Rows)
+            {
+                rowRemoved = false;
+                var existingTables = Tables.Where(t => t.Name == fromTable.Name).ToList();
+                foreach (var eTable in existingTables)
+                {
+                    foreach (var eRow in eTable.Rows)
+                    {
+                        if (eRow.KeyHash == r.KeyHash && eRow.ValueHash == r.ValueHash)
+                        {
+                            rowsToRemove.Add(r);
+                            rowRemoved = true;
+                            break;
+                        }
+                    }
+                    if (rowRemoved)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            foreach (DMSRow r in rowsToRemove)
+            {
+                fromTable.Rows.Remove(r);
+            }
+
+        }
 
         public void WriteToStream(StreamWriter sw, bool saveOnlyDiffs = false)
         {
