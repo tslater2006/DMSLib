@@ -71,7 +71,7 @@ namespace DMSLib
                     }
 
                     var ddlBlob = ms.ToArray();
-                    file.DDLs = new DDLDefaults(ddlBlob);
+                    file.DDLs = new DDLDefaults(ddlBlob, file.Endian == "LE");
                     ms.Close();
 
                     currentLine = sr.ReadLine();
@@ -111,7 +111,7 @@ namespace DMSLib
                             currentLine = sr.ReadLine();
                         }
 
-                        table.Metadata = new DMSRecordMetadata(ms.ToArray());
+                        table.Metadata = new DMSRecordMetadata(ms.ToArray(), file.Endian == "LE");
                         ms.Close();
                         /* Record Columns */
                         currentLine = sr.ReadLine();

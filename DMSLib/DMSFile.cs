@@ -138,7 +138,9 @@ namespace DMSLib
             /* Write out the header */
             sw.WriteLine($"SET VERSION_DAM  {Version}");
             sw.WriteLine(BlankLine);
-            sw.WriteLine($"SET ENDIAN {Endian}");
+            /* Right now we only write out LE version, though we can read BE version */
+            sw.WriteLine($"SET ENDIAN LE");
+            // sw.WriteLine($"SET ENDIAN {Endian}");
             sw.WriteLine($"SET BASE_LANGUAGE {BaseLanguage}");
             sw.WriteLine($"REM Database: {Database}");
             sw.WriteLine($"REM Started: {Started}");
@@ -183,22 +185,22 @@ namespace DMSLib
         public TableSpaceParamOverride[] Overrides;
         public int Unknown1;
 
-        public DDLDefaults(byte[] data)
+        public DDLDefaults(byte[] data, bool littleEndian)
         {
             using (MemoryStream ms = new MemoryStream(data))
             {
-                using (BinaryReader br = new BinaryReader(ms))
+                using (EndianBinaryReader br = new EndianBinaryReader(ms,littleEndian))
                 {
                     /* First DWORD is number of DDL Models */
-                    int modelCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    int modelCount = br.ReadInt32();
                     Models = new DDLModel[modelCount];
                     for (var x = 0; x < modelCount; x++)
                     {
                         Models[x] = new DDLModel(br);
                     }
 
-                    Unknown1 = BitConverter.ToInt32(br.ReadBytes(4), 0);
-                    var parameterCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    Unknown1 = br.ReadInt32();
+                    var parameterCount = br.ReadInt32();
                     foreach (var model in Models)
                     {
                         for (var x = 0; x < model.Parameters.Length; x++)
@@ -207,7 +209,7 @@ namespace DMSLib
                         }
                     }
 
-                    var overrideCount = BitConverter.ToInt32(br.ReadBytes(4), 0);
+                    var overrideCount = br.ReadInt32();
                     Overrides = new TableSpaceParamOverride[overrideCount];
                     for (var x = 0; x < overrideCount; x++)
                     {
@@ -265,7 +267,7 @@ namespace DMSLib
         public int Unknown1;
         public int Unknown2;
 
-        public DDLModel(BinaryReader br)
+        public DDLModel(EndianBinaryReader br)
         {
             Unknown1 = br.ReadInt32();
             Unknown2 = br.ReadInt32();
@@ -274,7 +276,7 @@ namespace DMSLib
             PlatformID = br.ReadInt16();
 
             var ddlLength = br.ReadInt32();
-            ModelSQL = FromUnicodeBytes(br.ReadBytes(ddlLength));
+            ModelSQL = br.ReadFromUnicode(ddlLength);
             Parameters = new DDLParam[ParameterCount];
         }
 
@@ -289,18 +291,6 @@ namespace DMSLib
             bw.Write(Encoding.Unicode.GetBytes(ModelSQL));
             bw.Write((short) 0);
         }
-
-        private string FromUnicodeBytes(byte[] data)
-        {
-            var str = Encoding.Unicode.GetString(data);
-            var nullIndex = str.IndexOf('\0');
-            if (nullIndex >= 0)
-            {
-                str = str.Substring(0, nullIndex);
-            }
-
-            return str;
-        }
     }
 
     public class DDLParam
@@ -312,15 +302,15 @@ namespace DMSLib
         public int Unknown2;
         public string Value;
 
-        public DDLParam(BinaryReader br)
+        public DDLParam(EndianBinaryReader br)
         {
             Unknown1 = br.ReadInt32();
             StatementType = br.ReadInt16();
             PlatformID = br.ReadInt16();
             var nameLength = br.ReadInt32();
-            Name = FromUnicodeBytes(br.ReadBytes(nameLength));
+            Name = br.ReadFromUnicode(nameLength);
             var valueLength = br.ReadInt32();
-            Value = FromUnicodeBytes(br.ReadBytes(valueLength));
+            Value = br.ReadFromUnicode(valueLength);
             Unknown2 = br.ReadInt32();
             Console.WriteLine($"Found Parameter {Name} with value {Value}");
         }
@@ -339,17 +329,6 @@ namespace DMSLib
             bw.Write(Unknown2);
         }
 
-        private string FromUnicodeBytes(byte[] data)
-        {
-            var str = Encoding.Unicode.GetString(data);
-            var nullIndex = str.IndexOf('\0');
-            if (nullIndex >= 0)
-            {
-                str = str.Substring(0, nullIndex);
-            }
-
-            return str;
-        }
     }
 
     public class TableSpaceParamOverride
@@ -362,15 +341,15 @@ namespace DMSLib
         public int Unknown1;
         public string Value;
 
-        public TableSpaceParamOverride(BinaryReader br)
+        public TableSpaceParamOverride(EndianBinaryReader br)
         {
-            SizingSet = BitConverter.ToInt32(br.ReadBytes(4), 0);
-            PlatformID = BitConverter.ToInt16(br.ReadBytes(2), 0);
-            Name = FromUnicodeBytes(br.ReadBytes(BitConverter.ToInt32(br.ReadBytes(4), 0)));
-            Value = FromUnicodeBytes(br.ReadBytes(BitConverter.ToInt32(br.ReadBytes(4), 0)));
-            DBName = FromUnicodeBytes(br.ReadBytes(BitConverter.ToInt32(br.ReadBytes(4), 0)));
-            TableSpace = FromUnicodeBytes(br.ReadBytes(BitConverter.ToInt32(br.ReadBytes(4), 0)));
-            Unknown1 = BitConverter.ToInt32(br.ReadBytes(4), 0);
+            SizingSet = br.ReadInt32();
+            PlatformID = br.ReadInt16();
+            Name = br.ReadFromUnicode(br.ReadInt32());
+            Value = br.ReadFromUnicode(br.ReadInt32());
+            DBName = br.ReadFromUnicode(br.ReadInt32());
+            TableSpace = br.ReadFromUnicode(br.ReadInt32());
+            Unknown1 = br.ReadInt32();
         }
 
         internal void WriteBytes(BinaryWriter bw)
@@ -395,18 +374,6 @@ namespace DMSLib
             bw.Write((short) 0);
 
             bw.Write(Unknown1);
-        }
-
-        private string FromUnicodeBytes(byte[] data)
-        {
-            var str = Encoding.Unicode.GetString(data);
-            var nullIndex = str.IndexOf('\0');
-            if (nullIndex >= 0)
-            {
-                str = str.Substring(0, nullIndex);
-            }
-
-            return str;
         }
     }
 }

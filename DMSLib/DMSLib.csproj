@@ -52,6 +52,7 @@
     <Compile Include="DMSRowDecoder.cs" />
     <Compile Include="DMSTable.cs" />
     <Compile Include="DMSWriter.cs" />
+    <Compile Include="EndianBinaryReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
