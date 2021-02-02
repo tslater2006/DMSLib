@@ -133,7 +133,7 @@ namespace DMSLib
 
         }
 
-        public void WriteToStream(StreamWriter sw, bool saveOnlyDiffs = false)
+        public void WriteToStream(StreamWriter sw, bool saveOnlyDiffs = false, List<DMSTable> selectedTables = null)
         {
             /* Write out the header */
             sw.WriteLine($"SET VERSION_DAM  {Version}");
@@ -161,7 +161,16 @@ namespace DMSLib
             }
 
             sw.WriteLine("/");
-            foreach (var table in Tables)
+
+            /* default to all tables */
+            List<DMSTable> tablesToSave = Tables;
+
+            if (selectedTables != null)
+            {
+                tablesToSave = selectedTables;
+            }
+
+            foreach (var table in tablesToSave)
             {
                 if (saveOnlyDiffs)
                 {
