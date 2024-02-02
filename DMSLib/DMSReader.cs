@@ -35,10 +35,17 @@ namespace DMSLib
 
                     file.Version = firstLine.Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
 
-                    /* Blank line */
-                    file.BlankLine = sr.ReadLine();
-
-                    file.Endian = sr.ReadLine().Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
+                    /* Blank line - sometimes not present...*/
+                    var nextLine = sr.ReadLine();
+                    if (nextLine.Trim().Length == 0)
+                    {
+                        file.BlankLine = sr.ReadLine();
+                        file.Endian = sr.ReadLine().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[2];
+                    } else
+                    {
+                        file.BlankLine = "";
+                        file.Endian = nextLine.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[2];
+                    }
                     file.BaseLanguage = sr.ReadLine().Split(new char[] {' '}, StringSplitOptions.RemoveEmptyEntries)[2];
                     file.Database = sr.ReadLine().Replace("REM Database: ", "");
                     file.Started = sr.ReadLine().Replace("REM Started: ", "");
@@ -160,7 +167,11 @@ namespace DMSLib
 
                             currentLine = sr.ReadLine();
                         }
-
+                        if (sr.EndOfStream)
+                        {
+                            /* 
+                            break;
+                        }
                         currentLine = sr.ReadLine();
                     }
 

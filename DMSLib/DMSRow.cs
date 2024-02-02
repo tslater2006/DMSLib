@@ -19,7 +19,7 @@ namespace DMSLib
         public long ValueHash;
         public long DateHash;
         public long VersionHash;
-
+        public long RowHash;
         public FieldTypes GetFieldType(int index)
         {
             if (OwningTable != null)
@@ -179,6 +179,7 @@ namespace DMSLib
                 ValueHash = hash;
 
             }
+            RowHash = HashCode.Combine(KeyHash, DateHash, VersionHash, ValueHash);
         }
 
         public string GetStringValue(int index)
@@ -221,13 +222,13 @@ namespace DMSLib
                     {
                         return null;
                     }
-                    return DateTime.ParseExact(GetStringValue(index), "yyyy-MM-dd-HH.mm.ss.000000", CultureInfo.InvariantCulture);
+                    return DateTime.ParseExact(GetStringValue(index), "yyyy-MM-dd-HH.mm.ss.ffffff", CultureInfo.InvariantCulture);
                 case FieldTypes.TIME:
                     if (GetStringValue(index) == "\0")
                     {
                         return null;
                     }
-                    return DateTime.ParseExact(GetStringValue(index), "HH.mm.ss.000000", CultureInfo.InvariantCulture);
+                    return DateTime.ParseExact(GetStringValue(index), "HH.mm.ss.ffffff", CultureInfo.InvariantCulture);
                 case FieldTypes.IMG_OR_ATTACH:
                     var start = Indexes[index];
                     var end = Indexes[index + 1];
